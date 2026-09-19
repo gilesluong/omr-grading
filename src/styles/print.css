@@ -1,0 +1,85 @@
+/* Print stylesheet for A4 OMR Paper Protocol */
+
+@page {
+  size: 210mm 297mm;
+  margin: 0;
+}
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box !important;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  #root {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+  }
+
+  /* Unconditionally strip all interactive UI and screen decorations */
+  [data-slot="sheet-overlay"],
+  [data-slot="sheet-content"],
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Unconditionally suppress debug visualization during actual printing */
+  .omr-debug-layer {
+    display: none !important;
+  }
+
+  .app-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    min-height: auto !important;
+  }
+
+  .preview-container { padding: 0 !important; overflow: visible !important; }
+  .page-transition { animation: none !important; }
+
+  .preview-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .omr-sheet-wrapper {
+    width: 210mm !important;
+    height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .omr-sheet-svg {
+    display: block !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
