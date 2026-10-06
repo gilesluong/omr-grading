@@ -163,7 +163,18 @@ export const AnswerKeyModal: React.FC<AnswerKeyModalProps> = ({
 
     const maxParsed = Math.max(...Object.keys(result.key).map(Number));
     const newLength = maxParsed > 0 ? maxParsed : result.parsedCount;
-    const targetTemplate = getTemplateForQuestionCount(newLength);
+    const currentCapacity =
+      selectedTemplate === "MCQ10"
+        ? 10
+        : selectedTemplate === "MCQ20"
+          ? 20
+          : selectedTemplate === "MCQ40"
+            ? 40
+            : 50;
+    const targetTemplate =
+      newLength <= currentCapacity
+        ? selectedTemplate
+        : getTemplateForQuestionCount(newLength);
 
     setSelectedTemplate(targetTemplate);
     setTestLength(newLength);

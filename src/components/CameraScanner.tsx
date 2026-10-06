@@ -30,6 +30,7 @@ import {
   gradeExam,
   loadScoringRules,
 } from "../scanner/grading";
+import { ARBubbleOverlay, computeARBubbleOverlays } from "../scanner/arOverlay";
 import { detectRegistrationMarkers } from "../scanner/markerDetector";
 import {
   CameraDeviceOption,
@@ -96,6 +97,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
 
   // Review State for Frozen Capture
   const [currentReviewItem, setCurrentReviewItem] = useState<BatchItem | null>(null);
+  const [reviewOverlays, setReviewOverlays] = useState<ARBubbleOverlay[]>([]);
   const [swipeOffset, setSwipeOffset] = useState<number>(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -607,6 +609,24 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
         rectifiedImageUrl: rectifiedUrl,
       };
 
+      // 3. Compute right/wrong visual mark overlays for the static rectified sheet preview
+      const rectifiedWidth = 360;
+      const rectifiedHeight = 509;
+      const { overlays } = computeARBubbleOverlays(
+        {
+          tl: { x: 0, y: 0 },
+          tr: { x: rectifiedWidth, y: 0 },
+          br: { x: rectifiedWidth, y: rectifiedHeight },
+          bl: { x: 0, y: rectifiedHeight },
+        },
+        rectifiedWidth,
+        rectifiedHeight,
+        activeGeom,
+        scanResult,
+        examScore
+      );
+
+      setReviewOverlays(overlays);
       setCurrentReviewItem(reviewItem);
       setSwipeOffset(0);
       setScannerMode("REVIEW");
@@ -641,12 +661,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
 
     // Reset immediately back to camera for the next paper!
     setCurrentReviewItem(null);
+    setReviewOverlays([]);
     setSwipeOffset(0);
     setScannerMode("CAMERA");
   };
 
   const handleRetake = () => {
     setCurrentReviewItem(null);
+    setReviewOverlays([]);
     setSwipeOffset(0);
     setScannerMode("CAMERA");
   };
@@ -843,14 +865,106 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
                   </span>
                 </div>
 
-                {/* Rectified Static Sheet Preview */}
+                {/* Rectified Static Sheet Preview with Right/Wrong Bubble Overlays */}
                 <div className="review-image-frame">
                   {currentReviewItem.rectifiedImageUrl ? (
-                    <img
-                      src={currentReviewItem.rectifiedImageUrl}
-                      alt="Captured Exam Sheet"
-                      className="review-rectified-img"
-                    />
+                    <>
+                      <img
+                        src={currentReviewItem.rectifiedImageUrl}
+                        alt="Captured Exam Sheet"
+                        className="review-rectified-img"
+                      />
+                      {reviewOverlays.length > 0 && (
+                        <svg
+                          className="review-overlay-svg"
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            width: "100%",
+                            height: "100%",
+                            pointerEvents: "none",
+                          }}
+                        >
+                          {reviewOverlays.map((bubble) => {
+                            if (bubble.type === "correct") {
+                              return (
+                                <g key={bubble.id} className="ar-bubble-correct">
+                                  <circle
+                                    cx={bubble.xPct}
+                                    cy={bubble.yPct}
+                                    r={bubble.radiusPct * 1.25}
+                                    className="ar-dot-glow ar-glow-correct"
+                                  />
+                                  <circle
+                                    cx={bubble.xPct}
+                                    cy={bubble.yPct}
+                                    r={bubble.radiusPct}
+                                    className="ar-dot-circle ar-circle-correct"
+                                  />
+                                  <text
+                                    x={bubble.xPct}
+                                    y={bubble.yPct}
+                                    textAnchor="middle"
+                                    dominantBaseline="central"
+                                    fontSize={bubble.radiusPct * 1.15}
+                                    className="ar-bubble-symbol"
+                                  >
+                                    ✓
+                                  </text>
+                                </g>
+                              );
+                            } else if (bubble.type === "incorrect") {
+                              return (
+                                <g key={bubble.id} className="ar-bubble-incorrect">
+                                  <circle
+                                    cx={bubble.xPct}
+                                    cy={bubble.yPct}
+                                    r={bubble.radiusPct * 1.25}
+                                    className="ar-dot-glow ar-glow-incorrect"
+                                  />
+                                  <circle
+                                    cx={bubble.xPct}
+                                    cy={bubble.yPct}
+                                    r={bubble.radiusPct}
+                                    className="ar-dot-circle ar-circle-incorrect"
+                                  />
+                                  <text
+                                    x={bubble.xPct}
+                                    y={bubble.yPct}
+                                    textAnchor="middle"
+                                    dominantBaseline="central"
+                                    fontSize={bubble.radiusPct * 1.15}
+                                    className="ar-bubble-symbol"
+                                  >
+                                    ✕
+                                  </text>
+                                </g>
+                              );
+                            } else if (bubble.type === "target") {
+                              return (
+                                <g key={bubble.id} className="ar-bubble-target">
+                                  <circle
+                                    cx={bubble.xPct}
+                                    cy={bubble.yPct}
+                                    r={bubble.radiusPct * 1.25}
+                                    className="ar-target-ring"
+                                  />
+                                  <circle
+                                    cx={bubble.xPct}
+                                    cy={bubble.yPct}
+                                    r={bubble.radiusPct * 0.35}
+                                    className="ar-target-center"
+                                  />
+                                </g>
+                              );
+                            }
+                            return null;
+                          })}
+                        </svg>
+                      )}
+                    </>
                   ) : (
                     <div className="text-xs text-slate-500 py-12">Sheet captured</div>
                   )}

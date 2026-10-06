@@ -166,21 +166,40 @@ export const App: React.FC = () => {
       <header className="app-topbar no-print">
         <div className="topbar-left">
           {mode === "scanner" ? (
-            <button
-              type="button"
-              className="topbar-key-btn"
-              onClick={() => setIsAnswerKeyOpen(true)}
-              title="Configure answer key for this test"
-              aria-label="Answer key"
-            >
-              <Key size={14} />
-              <span>
-                {currentQuestionCount > 0 ? `${currentQuestionCount} Qs Key` : "Set Key"}
-              </span>
-              <span style={{ fontSize: "10px", opacity: 0.7, fontWeight: 500 }}>
-                ({selectedTemplateId.replace("MCQ", "")}-sheet)
-              </span>
-            </button>
+            <>
+              <div className="template-select-wrapper">
+                <select
+                  className="template-select"
+                  aria-label="Questions per sheet"
+                  value={selectedTemplateId}
+                  onChange={(event) => {
+                    const val = event.target.value as TemplateId;
+                    setSelectedTemplateId(val);
+                    setActiveTemplate(val);
+                  }}
+                >
+                  {TEMPLATE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label} questions
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="template-select-icon" aria-hidden="true" />
+              </div>
+
+              <button
+                type="button"
+                className="topbar-key-btn"
+                onClick={() => setIsAnswerKeyOpen(true)}
+                title="Configure answer key for this test"
+                aria-label="Answer key"
+              >
+                <Key size={14} />
+                <span>
+                  {currentQuestionCount > 0 ? `${currentQuestionCount} Qs Key` : "Set Key"}
+                </span>
+              </button>
+            </>
           ) : (
             <>
               <button
