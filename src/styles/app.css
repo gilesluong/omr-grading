@@ -1546,7 +1546,7 @@
 /* Apple Camera Guidance / Status Pill */
 .apple-status-pill {
   position: absolute;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 144px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 168px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 36;
@@ -1626,7 +1626,7 @@
 /* Apple Camera-Style Minimal Zoom Switcher */
 .apple-zoom-bar {
   position: absolute;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 35;
@@ -2115,8 +2115,8 @@ select:focus-visible {
 .scanner-batch-indicator {
   position: absolute;
   top: -46px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 20px;
+  transform: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;

@@ -83,9 +83,6 @@ export const App: React.FC = () => {
   const config = TEMPLATES[selectedTemplateId];
   const geometry = useMemo(() => generateGeometry(config), [config]);
 
-  const currentKey = answerKeys[selectedTemplateId] || {};
-  const currentQuestionCount = Object.keys(currentKey).length;
-
   const handlePrint = () => {
     setIsMenuOpen(false);
     window.print();
@@ -195,9 +192,7 @@ export const App: React.FC = () => {
                 aria-label="Answer key"
               >
                 <Key size={14} />
-                <span>
-                  {currentQuestionCount > 0 ? `${currentQuestionCount} Qs Key` : "Set Key"}
-                </span>
+                <span>Key</span>
               </button>
             </>
           ) : (
