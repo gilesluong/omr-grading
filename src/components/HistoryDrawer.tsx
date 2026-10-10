@@ -10,6 +10,7 @@ import {
   AnswerKey,
   formatGradedSlackMessage,
   gradeExam,
+  loadScoringRules,
 } from "../scanner/grading";
 import { downloadGradebookCsv } from "../export/csvExport";
 import { TemplateId } from "../omr/types";
@@ -129,7 +130,9 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                   expandedScanId === scan.id || history.length === 1;
                 const formattedTime = new Date(scan.timestamp).toLocaleString();
                 const key = answerKeys[scan.templateId] || {};
-                const score = gradeExam(scan, key);
+                // Use the same scoring rules as the scanner/batch view so the
+                // history score matches what was shown at scan time.
+                const score = gradeExam(scan, key, loadScoringRules());
 
                 return (
                   <div key={scan.id} className="scan-card">

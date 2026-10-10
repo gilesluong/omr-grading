@@ -20,14 +20,17 @@ export function loadScanHistory(): ScanResult[] {
  * Saves a new scan result to localStorage (prepends to list).
  */
 export function saveScanResult(result: ScanResult): ScanResult[] {
+  const current = loadScanHistory();
+  const updated = [result, ...current.filter((item) => item.id !== result.id)];
   try {
-    const current = loadScanHistory();
-    const updated = [result, ...current.filter((item) => item.id !== result.id)];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     return updated;
   } catch (err) {
+    // Never signal failure by returning []: the caller assigns the result to
+    // its history state, so an empty array would wipe every visible scan even
+    // though they are still in memory.
     console.error('Failed to save scan result to localStorage:', err);
-    return [];
+    return updated;
   }
 }
 
@@ -35,14 +38,14 @@ export function saveScanResult(result: ScanResult): ScanResult[] {
  * Deletes a single scan result from localStorage.
  */
 export function deleteScanResult(id: string): ScanResult[] {
+  const current = loadScanHistory();
+  const updated = current.filter((item) => item.id !== id);
   try {
-    const current = loadScanHistory();
-    const updated = current.filter((item) => item.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     return updated;
   } catch (err) {
     console.error('Failed to delete scan result from localStorage:', err);
-    return [];
+    return current;
   }
 }
 
