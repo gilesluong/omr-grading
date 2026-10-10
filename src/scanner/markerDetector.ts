@@ -6,6 +6,13 @@ export interface MarkerDetectionResult {
   detected: boolean;
   corners: CornerPoints;
   confidence: number;
+  /**
+   * True when the page carries MORE than one sheet's worth of registration
+   * markers (an uncut 2-up / "double" A4 page holding two half-sheets). Such a
+   * page cannot be graded as a single sheet, and grading it anyway silently
+   * produced a 0% / F result, so callers must refuse it with a clear message.
+   */
+  twoUp?: boolean;
 }
 
 interface Candidate extends Point {
@@ -156,6 +163,7 @@ export function detectRegistrationMarkers(
   const points = candidates.sort((a, b) => b.area - a.area).slice(0, 48);
   let best: CornerPoints | null = null,
     bestScore = -Infinity;
+  let bestGroup: Candidate[] | null = null;
   const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
   let group: Candidate[] = [];
@@ -245,25 +253,12 @@ export function detectRegistrationMarkers(
     // filled answer bubbles) sitting inside a real sheet — not a sheet itself.
     const quad = [group[0], group[1], group[2], group[3]];
     const minMarkerArea = Math.min(...group.map((p) => p.area));
-    const insideQuad = (pt: Point) => {
-      let sign = 0;
-      for (let i = 0; i < 4; i++) {
-        const a = quad[i],
-          b = quad[(i + 1) % 4];
-        const cross = (b.x - a.x) * (pt.y - a.y) - (b.y - a.y) * (pt.x - a.x);
-        if (Math.abs(cross) < 1e-9) continue;
-        const s = Math.sign(cross);
-        if (sign === 0) sign = s;
-        else if (s !== sign) return false;
-      }
-      return true;
-    };
     const intruder = candidates.find(
       (p) =>
         !group.includes(p) &&
         p.area / (p.w * p.h) >= 0.6 &&
         p.area > minMarkerArea * INTRUDER_RATIO &&
-        !insideQuad(p),
+        !pointInQuad(quad, p),
     );
     if (intruder) return null;
 
@@ -345,6 +340,7 @@ export function detectRegistrationMarkers(
           if (score > bestScore) {
             bestScore = score;
             best = { tl, tr, br, bl };
+            bestGroup = [tl, tr, br, bl];
           }
         }
 
@@ -352,7 +348,27 @@ export function detectRegistrationMarkers(
   const corners = {} as CornerPoints;
   for (const key of ["tl", "tr", "br", "bl"] as const)
     corners[key] = { x: best[key].x / scale, y: best[key].y / scale };
-  return { detected: true, corners, confidence: 1 };
+
+  // How many marker-sized solid marks sit INSIDE the detected page? A single
+  // sheet has exactly four (its registration markers). An uncut 2-up page holds
+  // two half-sheets, so it has eight, and grading it as one sheet read the
+  // wrong grid and scored 0%. Marks from a neighbouring cut sheet lie OUTSIDE
+  // the page quad, so they do not count here.
+  let twoUp = false;
+  if (bestGroup) {
+    const minArea = Math.min(...bestGroup.map((p) => p.area));
+    const quad: Point[] = bestGroup;
+    const markerSized = candidates.filter(
+      (p) =>
+        p.area / (p.w * p.h) >= 0.6 &&
+        p.area >= minArea * 0.6 &&
+        p.area <= minArea * 1.7 &&
+        pointInQuad(quad, p),
+    ).length;
+    twoUp = markerSized >= 7;
+  }
+
+  return { detected: true, corners, confidence: 1, twoUp };
 }
 
 /** Signed-area magnitude of a candidate quadrilateral. */
@@ -364,4 +380,19 @@ function quadArea(g: Point[]): number {
     area += p.x * q.y - p.y * q.x;
   }
   return Math.abs(area) / 2;
+}
+
+/** Convex-quad containment by consistent cross-product sign. */
+function pointInQuad(quad: Point[], pt: Point): boolean {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = quad[i],
+      b = quad[(i + 1) % 4];
+    const cross = (b.x - a.x) * (pt.y - a.y) - (b.y - a.y) * (pt.x - a.x);
+    if (Math.abs(cross) < 1e-9) continue;
+    const s = Math.sign(cross);
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+  }
+  return true;
 }
