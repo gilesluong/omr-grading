@@ -1,14 +1,22 @@
 import { ScanResult } from '../scanner/types';
-import { AnswerKey, gradeExam } from '../scanner/grading';
+import { AnswerKey, gradeExam, loadScoringRules } from '../scanner/grading';
 import { TemplateId } from '../omr/types';
 
 /**
  * Escapes a cell value for standard CSV.
+ *
+ * Also neutralises spreadsheet formula injection: Excel/Sheets evaluate a cell
+ * whose text starts with = + - @ or a control character even when it is quoted,
+ * so a student name of "=1+1" or "=cmd|'/c calc'!A0" would otherwise execute in
+ * the teacher's gradebook.
  */
 function escapeCsvCell(val: any): string {
   if (val === null || val === undefined) return '';
-  const str = String(val);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  let str = String(val);
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -86,7 +94,9 @@ export function generateGradebookCsv(
   // Export each student scan submission with inline context
   history.forEach((scan) => {
     const key = answerKeys[scan.templateId] || {};
-    const score = gradeExam(scan, key);
+    // Same scoring rules as the scanner/batch view, otherwise the exported
+    // grade disagrees with what the teacher saw while scanning.
+    const score = gradeExam(scan, key, loadScoringRules());
 
     const row = [
       scan.id,

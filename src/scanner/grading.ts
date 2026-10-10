@@ -141,19 +141,9 @@ export function loadAnswerKeys(): Record<TemplateId, AnswerKey> {
       return defaults;
     }
     const parsed = JSON.parse(raw);
-    // Discard any cyclical dummy keys (1: A, 2: B, 3: C, 4: D ...)
-    for (const tid of ['MCQ10', 'MCQ20', 'MCQ40', 'MCQ50'] as TemplateId[]) {
-      if (
-        parsed[tid] &&
-        parsed[tid][1] === 'A' &&
-        parsed[tid][2] === 'B' &&
-        parsed[tid][3] === 'C' &&
-        parsed[tid][4] === 'D' &&
-        parsed[tid][5] === 'A'
-      ) {
-        parsed[tid] = {};
-      }
-    }
+    // NOTE: keys are never discarded by matching their values. A legitimate key
+    // can legitimately read A,B,C,D,A (the "Fill ABCD" button and any imported
+    // key can), and silently deleting it on load scored those papers 0% / F.
     return { ...defaults, ...parsed };
   } catch (err) {
     console.error('Failed to load answer keys from localStorage:', err);
