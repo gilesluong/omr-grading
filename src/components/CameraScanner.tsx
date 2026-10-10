@@ -47,6 +47,14 @@ import {
   calculateBatchItemConfidence,
 } from "../scanner/batch";
 
+/** Long edge of the live viewfinder detection canvas. Markers must stay large
+ *  enough here to survive blur, low light and a sheet held at a distance. */
+const LIVE_SAMPLE_PX = 720;
+/** Minimum quad area (% of the viewfinder, scale 0-100) before auto-capture
+ *  fires. The detector itself works well below this; the floor only exists so
+ *  an accidental quad cannot trigger a capture on an empty desk. */
+const MIN_AUTO_CAPTURE_AREA_PCT = 700;
+
 interface CameraScannerProps {
   selectedTemplateId: TemplateId;
   answerKeys: Record<TemplateId, AnswerKey>;
@@ -114,10 +122,15 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
     lastCorners: CornerPoints | null;
     stableSince: number | null;
     isCapturing: boolean;
+    /** Consecutive frames where fiducials were not found. A single missed
+     *  frame must not tear down the reticle or restart the stillness timer,
+     *  otherwise a flickering detection can stop auto-capture ever firing. */
+    missFrames: number;
   }>({
     lastCorners: null,
     stableSince: null,
     isCapturing: false,
+    missFrames: 0,
   });
 
   // Reticle animation
@@ -407,8 +420,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
         view.clientHeight,
       );
 
-      // Lightweight 480px sampling for rapid corner fiducial detection
-      const scale = 480 / Math.max(crop.width, crop.height);
+      // Sampling for rapid corner fiducial detection. 720px keeps the detected
+      // markers large enough to survive blur/lighting/small sheets while
+      // staying cheap enough for a 180ms live loop on a phone.
+      const scale = LIVE_SAMPLE_PX / Math.max(crop.width, crop.height);
       const w = Math.round(crop.width * scale);
       const h = Math.round(crop.height * scale);
       canvas.width = w;
@@ -439,9 +454,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
             bl: { x: (detection.corners.bl.x / w) * 100, y: (detection.corners.bl.y / h) * 100 },
           };
           setLiveCorners(cornersNorm);
+          stabilityRef.current.missFrames = 0;
 
           // Evaluate Stability & Quality:
-          // 1. Minimum Sheet Size in Frame: Area of quadrilateral > 18% of viewfinder
+          // 1. Minimum Sheet Size in Frame: quad area as % of the viewfinder
           const c = cornersNorm;
           const quadArea =
             0.5 *
@@ -449,10 +465,10 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
               (c.tl.x * c.tr.y - c.tr.x * c.tl.y) +
               (c.tr.x * c.br.y - c.br.x * c.tr.y) +
               (c.br.x * c.bl.y - c.bl.x * c.br.y) +
-              (c.bl.x * c.tl.y - c.bl.x * c.tl.y)
+              (c.bl.x * c.tl.y - c.tl.x * c.bl.y)
             );
 
-          const isLargeEnough = quadArea >= 1800; // >= 18% of 100x100 area
+          const isLargeEnough = quadArea >= MIN_AUTO_CAPTURE_AREA_PCT;
 
           // 2. Corner displacement stability check
           const last = stabilityRef.current.lastCorners;
@@ -463,7 +479,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
             const shiftBR = Math.hypot(c.br.x - last.br.x, c.br.y - last.br.y);
             const shiftBL = Math.hypot(c.bl.x - last.bl.x, c.bl.y - last.bl.y);
             const maxShift = Math.max(shiftTL, shiftTR, shiftBR, shiftBL);
-            isStationary = maxShift < 2.0; // Corner moved less than 2.0% of frame
+            isStationary = maxShift < 2.5; // Corner moved less than 2.5% of frame
           }
 
           stabilityRef.current.lastCorners = c;
@@ -482,9 +498,14 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
             stabilityRef.current.stableSince = null;
           }
         } else {
-          setLiveCorners(null);
-          stabilityRef.current.stableSince = null;
-          stabilityRef.current.lastCorners = null;
+          // Tolerate the odd dropped frame: only tear down the reticle and the
+          // stillness timer once detection is consistently failing.
+          stabilityRef.current.missFrames += 1;
+          if (stabilityRef.current.missFrames >= 3) {
+            setLiveCorners(null);
+            stabilityRef.current.stableSince = null;
+            stabilityRef.current.lastCorners = null;
+          }
         }
       } catch {
         // Ignore sampling glitches
