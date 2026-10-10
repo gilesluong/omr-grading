@@ -30,12 +30,13 @@ const A4 = 297 / 210; // sheet height / width
 const FRAME_W = 1280;
 const FRAME_H = 960;
 
-async function renderSheet(width: number) {
+async function renderSheet(width: number, marked: boolean = true) {
   const geometry = generateGeometry(TEMPLATES["MCQ20"]);
   const marks: Record<number, Choice> = {};
-  geometry.questions.forEach((q) => {
-    marks[q.question] = (["A", "B", "C", "D"] as Choice[])[(q.question - 1) % 4];
-  });
+  if (marked)
+    geometry.questions.forEach((q) => {
+      marks[q.question] = (["A", "B", "C", "D"] as Choice[])[(q.question - 1) % 4];
+    });
   const markup = renderToStaticMarkup(
     <Sheet geometry={geometry} interactiveMarks={marks} />,
   );
@@ -259,6 +260,35 @@ describe("Capture operating envelope", () => {
     for (const sheetHeight of [800, 528, 400, 300, 211]) {
       const r = await successRate(img, { sheetHeight, live: 720 });
       expect({ sheetHeight, ...r }).toMatchObject({ found: r.trials });
+    }
+  }, 30000);
+
+  it("never invents an answer on a completely blank sheet", async () => {
+    // A blank sheet graded against a real key must report every question blank.
+    // Comparing each bubble interior to a ring quantile used to fold the
+    // lighting gradient into the fill ratio, so an uneven capture produced a
+    // phantom answer (a teacher saw exactly one wrong answer on a blank sheet).
+    const img = await renderSheet(700, false);
+    const cases: Degrade[] = [
+      { sheetHeight: 800 },
+      { sheetHeight: 800, shadow: 0.5 },
+      { sheetHeight: 800, noise: 16 },
+      { sheetHeight: 800, boxBlur: 2 },
+      { sheetHeight: 800, jpeg: 35 },
+      { sheetHeight: 430, shadow: 0.4, noise: 10 },
+      { sheetHeight: 700, shadow: 0.3, noise: 8, boxBlur: 1, jpeg: 40 },
+    ];
+    for (const d of cases) {
+      for (let t = 0; t < 3; t++) {
+        const frame = await capture(img, { ...d, seed: 11 + t * 977 });
+        const det = detectRegistrationMarkers(frame, fallback);
+        if (!det.detected) continue;
+        const r = processOMRSheet(frame, img.geometry, det.corners);
+        const phantom = img.geometry.questions
+          .filter((q) => r.answers[q.question].detectedChoice !== "BLANK")
+          .map((q) => `Q${q.question}=${r.answers[q.question].detectedChoice}`);
+        expect({ ...d, seed: t, phantom }).toMatchObject({ phantom: [] });
+      }
     }
   }, 30000);
 

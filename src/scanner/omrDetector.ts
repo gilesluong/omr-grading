@@ -30,6 +30,49 @@ function getPixelLuminance(imageData: ImageData, x: number, y: number): number {
 }
 
 /**
+ * Least-squares plane fit z = a + b*x + c*y through the background-ring samples,
+ * evaluated at the origin (the bubble centre). Returns the intercept, or 0 when
+ * the fit is degenerate. This estimates what bare paper would read like at the
+ * bubble's own position, so a lighting gradient across the sampled patch is not
+ * mistaken for ink.
+ */
+function fitPlaneAtCenter(points: Array<{ x: number; y: number; v: number }>): number {
+  if (points.length < 3) return 0;
+  let s1 = 0, sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0, sz = 0, sxz = 0, syz = 0;
+  for (const p of points) {
+    s1 += 1;
+    sx += p.x;
+    sy += p.y;
+    sxx += p.x * p.x;
+    sxy += p.x * p.y;
+    syy += p.y * p.y;
+    sz += p.v;
+    sxz += p.x * p.v;
+    syz += p.y * p.v;
+  }
+  // Normal equations for [a, b, c]; solve by Gaussian elimination with pivoting.
+  const M = [
+    [s1, sx, sy, sz],
+    [sx, sxx, sxy, sxz],
+    [sy, sxy, syy, syz],
+  ];
+  for (let i = 0; i < 3; i++) {
+    let pivot = i;
+    for (let k = i + 1; k < 3; k++) if (Math.abs(M[k][i]) > Math.abs(M[pivot][i])) pivot = k;
+    [M[i], M[pivot]] = [M[pivot], M[i]];
+    if (Math.abs(M[i][i]) < 1e-9) return 0;
+    for (let k = i + 1; k < 3; k++) {
+      const factor = M[k][i] / M[i][i];
+      for (let j = i; j < 4; j++) M[k][j] -= factor * M[i][j];
+    }
+  }
+  const c = M[2][3] / M[2][2];
+  const b = (M[1][3] - M[1][2] * c) / M[1][1];
+  const a = (M[0][3] - M[0][1] * b - M[0][2] * c) / M[0][0];
+  return Number.isFinite(a) && a > 0 ? a : 0;
+}
+
+/**
  * Samples a circular region and estimates fill ratio compared to local paper background.
  */
 function sampleBubbleFill(
@@ -39,7 +82,7 @@ function sampleBubbleFill(
   H: Matrix3x3,
 ): { fillRatio: number; isMarked: boolean } {
   const inside: number[] = [];
-  const background: number[] = [];
+  const ring: Array<{ x: number; y: number; v: number }> = [];
   // Sample in paper coordinates, then project every point. A single pixel radius
   // cannot describe ellipses or the change in scale down a tilted page.
   for (let y = -3.2; y <= 3.2; y += 0.32) {
@@ -60,19 +103,28 @@ function sampleBubbleFill(
         );
       }
       const value = getPixelLuminance(imageData, point.x, point.y);
-      (inner ? inside : background).push(value);
+      if (inner) inside.push(value);
+      else ring.push({ x, y, v: value });
     }
   }
-  // The old background ring crossed the printed circle. Use paper outside it
-  // and a bright quantile so nearby choice labels do not darken the reference.
-  background.sort((a, b) => a - b);
-  const paper = background[Math.floor(background.length * 0.75)] || 1;
-  const average = inside.reduce((sum, value) => sum + value, 0) / inside.length;
+
+  // Reference paper brightness AT THE BUBBLE CENTRE.
+  //
+  // The ring sits ~2.8-3.2mm out, so simply comparing the interior to a ring
+  // quantile bakes the lighting gradient into the result: whenever brightness
+  // falls off across those ~6mm (shadow, vignette, uneven classroom light) the
+  // interior looks darker than the ring even with no ink at all, which invented
+  // an answer on a completely blank sheet. Fitting a plane to the ring and
+  // evaluating it at the centre removes that bias while staying noise-robust
+  // (a mean would too, but it cannot follow the gradient).
+  const paper = fitPlaneAtCenter(ring) || 1;
+
+  const insideMean = inside.reduce((sum, v) => sum + v, 0) / (inside.length || 1);
   const darkness =
-    inside.filter((value) => value < paper * 0.72).length / inside.length;
+    inside.filter((value) => value < paper * 0.72).length / (inside.length || 1);
   const fillRatio = Math.min(
     1,
-    Math.max(darkness, Math.max(0, (paper - average) / paper) * 1.2),
+    Math.max(darkness, Math.max(0, (paper - insideMean) / paper) * 1.2),
   );
   return {
     fillRatio: Number(fillRatio.toFixed(3)),
