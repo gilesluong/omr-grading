@@ -592,6 +592,13 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({
       if (!markerCheck.detected) {
         throw new Error("Could not detect all 4 corner markers clearly. Please realign sheet.");
       }
+      if (markerCheck.twoUp) {
+        // Two half-sheets on one page. Grading it as a single sheet read the
+        // wrong bubble grid and silently scored 0%, so refuse instead.
+        throw new Error(
+          "This page holds two half-sheets (2-up print). Cut along the centre line, or print 1-up, then scan again.",
+        );
+      }
 
       // 1. Perspective rectify sheet into static orthogonal image
       const rectified = warpPerspective(imageData, markerCheck.corners, 360, 509);
